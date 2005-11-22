@@ -1,47 +1,78 @@
 use Sub::Install;
 use Test::More 'no_plan';
+
+use strict;
 use warnings;
 
 # These tests largely copied from Damian Conway's Sub::Installer tests.
 
-# Install a sub in a package...
+{ # Install a sub in a package...
+  my $sub_ref = Sub::Install::install_sub({ code => \&ok, as => 'ok1' });
 
-my $sub_ref = Sub::Install::install_sub({ code => \&ok, as => 'ok1' });
+  isa_ok($sub_ref, 'CODE', 'return value of first install_sub');
 
-is ref $sub_ref, 'CODE'                  => 'install returns code ref';
+  is_deeply($sub_ref, \&ok, 'it returns the correct code ref');
 
-is_deeply \&ok, $sub_ref                 => 'install returns correct code ref';
+  ok1(1, 'installed sub runs');
+}
 
-ok1(1                                    => 'installed sub runs');
+{ # Install the same sub in the same package...
+  local $SIG{__WARN__}
+    = sub { pass('warned as expected') if $_[0] =~ /redefined/ };
 
+  my $sub_ref = Sub::Install::install_sub({ code => \&is, as => 'ok1' });
 
-# Install the same sub in the same package...
+  isa_ok($sub_ref, 'CODE', 'return value of second install_sub');
 
-$SIG{__WARN__} = sub { ok 1 => 'warned as expected' if $_[0] =~ /redefined/ };
+  is_deeply($sub_ref, \&is, 'install2 returns correct code ref');
 
+  ok1(1,1, 'installed sub runs (with new arguments)');
+}
 
-$sub_ref = Sub::Install::install_sub({ code => \&is, as => 'ok1' });
+{ # Install in another package...
+  my $sub_ref = Sub::Install::install_sub({
+    code => \&ok,
+    into => 'Other',
+    as   => 'ok1'
+  });
 
-is ref $sub_ref, 'CODE'                  => 'install2 returns code ref';
+  isa_ok($sub_ref, 'CODE', 'return value of third install_sub');
 
-is_deeply \&is, $sub_ref                 => 'install2 returns correct code ref';
+  is_deeply($sub_ref, \&ok, 'it returns the correct code ref');
 
-ok1(1,1                                  => 'installed sub reruns');
+  ok1(1,1, 'sub previously installed into main still runs properly');
 
-# Install in another package...
+  package Other;
+  ok1(1,   'remotely installed sub runs properly');
+}
 
-$sub_ref = Sub::Install::install_sub({
-  code => \&ok,
-  into => 'Other',
-  as   => 'ok1'
-});
+{ # cross-package installation
+  sub foo { return $_[0] }
 
-is ref $sub_ref, 'CODE'                  => 'install3 returns code ref';
+  my $sub_ref = Sub::Install::install_sub({
+    code => 'foo',
+    from => 'main',
+    into => 'Other::YetAnother',
+    as   => 'return_lhs'
+  });
 
-is_deeply \&ok, $sub_ref                 => 'install3 returns correct code ref';
+  isa_ok($sub_ref, 'CODE', 'return value of fourth install_sub');
 
-ok1(1,1                                  => 'installed sub reruns');
+  is_deeply(
+    $sub_ref,
+    \&main::foo,
+    'it returns the correct code ref'
+  );
 
-package Other;
+  is(
+    main->foo,
+    'main',
+    'the original code does what we want',
+  );
 
-ok1(1                                    => 'remotely installed sub runs');
+  is(
+    Other::YetAnother->return_lhs,
+    'Other::YetAnother',
+    'and the installed code works, too',
+  );
+}

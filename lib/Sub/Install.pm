@@ -11,13 +11,13 @@ Sub::Install - install subroutines into packages easily
 
 =head1 VERSION
 
-version 0.01
+version 0.02
 
- $Id: /my/rjbs/subinst/lib/Sub/Install.pm 16598 2005-11-22T03:30:52.663848Z rjbs  $
+ $Id: /my/rjbs/subinst/trunk/lib/Sub/Install.pm 16619 2005-11-22T16:34:02.590722Z rjbs  $
 
 =cut
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 =head1 SYNOPSIS
 
@@ -104,8 +104,8 @@ sub _process_arg_and_install {
 
   my ($calling_pkg) = caller(1);
 
-  $arg->{into} ||= $calling_pkg;
-  $arg->{from} ||= $calling_pkg;
+  $arg->{into} = $calling_pkg unless $arg->{into};
+  $arg->{from} = $calling_pkg unless $arg->{from};
 
   croak "named argument 'code' is not optional" unless $arg->{code};
 
@@ -113,16 +113,15 @@ sub _process_arg_and_install {
     unless ($arg->{as}) {
       require B;
       my $name = B::svref_2object($arg->{code})->GV->NAME;  
-      $name =~ s/\A.+:://g;
-      $arg->{as} = $name;
+      $arg->{as} = $name unless $name =~ /\A__ANON__/;
     }
   } else {
     my $code = $arg->{from}->can($arg->{code});
-
+    
     croak "couldn't find subroutine named $arg->{code} in package $arg->{from}"
       unless $code;
 
-    $arg->{as} ||= $arg->{code};
+    $arg->{as}   = $arg->{code} unless $arg->{as};
     $arg->{code} = $code;
   }
 
