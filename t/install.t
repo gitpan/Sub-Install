@@ -47,11 +47,11 @@ use warnings;
 }
 
 { # cross-package installation
-  sub foo { return $_[0] }
+  sub Other::Another::foo { return $_[0] }
 
   my $sub_ref = Sub::Install::install_sub({
     code => 'foo',
-    from => 'main',
+    from => 'Other::Another',
     into => 'Other::YetAnother',
     as   => 'return_lhs'
   });
@@ -60,13 +60,13 @@ use warnings;
 
   is_deeply(
     $sub_ref,
-    \&main::foo,
+    \&Other::Another::foo,
     'it returns the correct code ref'
   );
 
   is(
-    main->foo,
-    'main',
+    Other::Another->foo,
+    'Other::Another',
     'the original code does what we want',
   );
 

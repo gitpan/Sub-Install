@@ -11,13 +11,13 @@ Sub::Install - install subroutines into packages easily
 
 =head1 VERSION
 
-version 0.02
+version 0.03
 
- $Id: /my/rjbs/subinst/trunk/lib/Sub/Install.pm 16619 2005-11-22T16:34:02.590722Z rjbs  $
+ $Id: /my/rjbs/subinst/trunk/lib/Sub/Install.pm 16622 2005-11-23T00:17:55.304991Z rjbs  $
 
 =cut
 
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 
 =head1 SYNOPSIS
 
@@ -82,7 +82,7 @@ is the same as:
 =cut
 
 sub install_sub {
-  _process_arg_and_install($_[0]);
+  _process_arg_and_install($_[0], \&_install);
 }
 
 =head2 C< reinstall_sub >
@@ -100,16 +100,18 @@ sub reinstall_sub {
 sub _process_arg_and_install {
   my ($arg, $installer) = @_;
 
-  $installer ||= \&_install;
-
+  # We're "guaranteed" to be called by one layer of indirection.
   my ($calling_pkg) = caller(1);
 
+  # I'd rather use ||= but I'm whoring for Devel::Cover.
   $arg->{into} = $calling_pkg unless $arg->{into};
   $arg->{from} = $calling_pkg unless $arg->{from};
 
+  # This is the only absolutely required argument, in many cases.
   croak "named argument 'code' is not optional" unless $arg->{code};
 
   if (ref $arg->{code} eq 'CODE') {
+    # try to generate target name by looking up source's name
     unless ($arg->{as}) {
       require B;
       my $name = B::svref_2object($arg->{code})->GV->NAME;  
@@ -147,33 +149,102 @@ sub _reinstall {
   *$fullname = $code;
 }
 
+=head2 C< install_installers >
+
+This routine is provided to allow Sub::Install compatibility with
+Sub::Installer.  It installs C<install_sub> and C<reinstall_sub> methods on the
+package in its C<into> argument.
+
+ Sub::Install::install_installers('Code::Builder'); # just for us, please
+ Code::Builder->install_sub({ name => $code_ref });
+
+ Sub::Install::install_installers('UNIVERSAL'); # feeling lucky, punk?
+ Anything::At::All->install_sub({ moniker => $sub_ref });
+
+The installed installers are similar, but not identical, to those provided by
+Sub::Installer.  They accept a single hash as an argument.  The key/value pairs
+are used as the C<as> and C<code> parameters to the C<install_sub> routine
+detailed above.  The package name on which the method is called is used as the
+C<into> parameter.
+
+Unlike Sub::Installer's C<install_sub> will not eval strings into code, but
+will look for named code in the calling package.
+
+=cut
+
+sub install_installers {
+  my ($arg) = @_;
+
+  # set up default target here
+  ($arg->{into}) = caller(0) unless $arg->{into};
+
+  my @methods = qw(install_sub reinstall_sub);
+
+  for my $method (@methods) {
+    my $code = sub {
+      my ($package, $subs) = @_;
+      my ($caller) = caller(0);
+      my $return;
+      for (my ($name, $sub) = %$subs) {
+        $return = Sub::Install->can($method)->({
+          code => $sub,
+          from => $caller,
+          into => $package,
+          as   => $name
+        });
+      }
+      return $return;
+    };
+    install_sub({ code => $code, into => $arg->{into}, as => $method });
+  }
+}
+
+
+=head1 EXPORTS
+
+Sub::Install exports C<install_sub> and C<reinstall_sub> only if they are
+requested.
+
+=cut
+
 sub import {
   my $class  = shift;
   my %import = map { $_ => 1 } @_;
   my ($target) = caller(0);
 
+  # eating my own dogfood
   for (qw(install_sub reinstall_sub)) {
     install_sub({ code => $_, into => $target }) if ($import{$_});
   }
 }
 
+=head1 SEE ALSO
+
+=over
+
+=item L<Sub::Installer>
+
+This module is (obviously) a reaction to Damian Conway's Sub::Installer, which
+does the same thing, but does it by getting its greasy fingers all over
+UNIVERSAL.  I was really happy about the idea of making the installation of
+coderefs less ugly, but I couldn't bring myself to replace the ugliness of
+typeglobs and loosened strictures with the ugliness of UNIVERSAL methods.
+
+=back
+
 =head1 AUTHOR
 
 Ricardo Signes, C<< <rjbs@cpan.org> >>
 
-This module is (obviously) a reaction to L<Sub::Installer>, which does the same
-thing, but does it by getting its greasy fingers all over UNIVERSAL.
-
-=head1 TODO
-
-This module needs more tests.
+Several of the tests are adapted from tests that shipped with Damian Conway's
+Sub-Installer distribution.
 
 =head1 BUGS
 
-Please report any bugs or feature requests to
-C<bug-sub-install@rt.cpan.org>, or through the web interface at
-L<http://rt.cpan.org>.  I will be notified, and then you'll automatically be
-notified of progress on your bug as I make changes.
+Please report any bugs or feature requests to C<bug-sub-install@rt.cpan.org>,
+or through the web interface at L<http://rt.cpan.org>.  I will be notified, and
+then you'll automatically be notified of progress on your bug as I make
+changes.
 
 =head1 COPYRIGHT
 
