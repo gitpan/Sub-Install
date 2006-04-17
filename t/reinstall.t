@@ -1,5 +1,5 @@
 use Sub::Install qw(reinstall_sub);
-use Test::More 'no_plan';
+use Test::More tests => 15;
 
 use strict;
 use warnings;
@@ -18,11 +18,35 @@ use warnings;
   ok1(1, "reinstalled sub runs");
 }
 
+{
+  my $to_avail = eval "use Test::Output; 1";
+  SKIP: {
+    skip "can't run this test without Test::Output", 1 unless $to_avail;
+    Sub::Install::reinstall_sub({ code => \&ok, as => 'tmp_ok' });
+    
+    my $expected_warning = <<'END_WARNING';
+Prototype mismatch: sub main::tmp_ok ($;$) vs ($$;$) at t/reinstall.t line 32
+END_WARNING
+
+    stderr_is(
+      sub { Sub::Install::reinstall_sub({ code => \&is, as => 'tmp_ok' }) },
+      $expected_warning,
+      "correct warnings went out STDERR",
+    );
+  }
+}
+
 { # Install the same sub in the same package...
-  local $SIG{__WARN__}
-    = sub { fail("warned unexpected: @_") if $_[0] =~ /redefined/ };
+  my $proto = 0;
+
+  local $SIG{__WARN__} = sub {
+    return ($proto = 1) if $_[0] =~ m{Prototype mismatch.+t/reinstall.t};
+    die "unexpected warning: @_";
+  };
 
   my $sub_ref = reinstall_sub({ code => \&is, as => 'ok1' });
+
+  ok($proto, 'correct warning went to $SIG{__WARN__}');
 
   isa_ok($sub_ref, 'CODE', 'return value of second install_sub');
 
@@ -50,3 +74,12 @@ use warnings;
   package Other;
   ok1();
 }
+
+eval {
+  my $arg = { code => sub {}, into => 'Other', as => 'ok1' };
+  Sub::Install::_process_arg_and_install(
+    $arg,
+    \&Sub::Install::_install_fatal
+  );
+};
+like($@, qr/redefine/, $@);

@@ -2,7 +2,6 @@ Changes
 lib/Sub/Install.pm
 Makefile.PL
 MANIFEST
-META.yml			# Will be created by "make dist"
 README
 t/00-load.t
 t/auto_as.t
@@ -13,3 +12,4 @@ t/pod.t
 t/reinstall.t
 t/SI_install.t
 t/SI_reinstall.t
+META.yml                                 Module meta-data (added by MakeMaker)

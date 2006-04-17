@@ -1,5 +1,5 @@
 use Sub::Install;
-use Test::More 'no_plan';
+use Test::More tests => 17;
 
 use strict;
 use warnings;
@@ -16,11 +16,39 @@ use warnings;
   ok1(1, 'installed sub runs');
 }
 
+{
+  my $to_avail = eval "use Test::Output; 1";
+  SKIP: {
+    skip "can't run this test without Test::Output", 1 unless $to_avail;
+    Sub::Install::install_sub({ code => \&ok, as => 'tmp_ok' });
+    
+    my $expected_warning = <<'END_WARNING';
+Subroutine main::tmp_ok redefined at t/install.t line 31
+Prototype mismatch: sub main::tmp_ok ($;$) vs ($$;$) at t/install.t line 31
+END_WARNING
+
+    stderr_is(
+      sub { Sub::Install::install_sub({ code => \&is, as => 'tmp_ok' }) },
+      $expected_warning,
+    );
+  }
+}
+
 { # Install the same sub in the same package...
-  local $SIG{__WARN__}
-    = sub { pass('warned as expected') if $_[0] =~ /redefined/ };
+  my $redef = 0;
+  my $proto = 0;
+
+  local $SIG{__WARN__} = sub {
+    return ($redef = 1) if $_[0] =~ m{Subroutine \S+ redef.+t/install.t};
+    return ($proto = 1) if $_[0] =~ m{Prototype mismatch.+t/install.t};
+    # pass("warned as expected: $_[0]") if $_[0] =~ /redefined/;
+    die "unexpected warning: @_";
+  };
 
   my $sub_ref = Sub::Install::install_sub({ code => \&is, as => 'ok1' });
+
+  ok($redef, 'correct redefinition warning went to $SIG{__WARN__}');
+  ok($proto, 'correct prototype warning went to $SIG{__WARN__}');
 
   isa_ok($sub_ref, 'CODE', 'return value of second install_sub');
 

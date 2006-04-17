@@ -11,13 +11,13 @@ Sub::Install - install subroutines into packages easily
 
 =head1 VERSION
 
-version 0.03
+version 0.90
 
  $Id: /my/rjbs/subinst/trunk/lib/Sub/Install.pm 16622 2005-11-23T00:17:55.304991Z rjbs  $
 
 =cut
 
-our $VERSION = '0.03';
+our $VERSION = '0.90';
 
 =head1 SYNOPSIS
 
@@ -114,12 +114,12 @@ sub _process_arg_and_install {
     # try to generate target name by looking up source's name
     unless ($arg->{as}) {
       require B;
-      my $name = B::svref_2object($arg->{code})->GV->NAME;  
+      my $name = B::svref_2object($arg->{code})->GV->NAME;
       $arg->{as} = $name unless $name =~ /\A__ANON__/;
     }
   } else {
     my $code = $arg->{from}->can($arg->{code});
-    
+
     croak "couldn't find subroutine named $arg->{code} in package $arg->{from}"
       unless $code;
 
@@ -136,16 +136,63 @@ sub _process_arg_and_install {
 }
 
 # do the ugly work
+
+my $_install_warnings;
+my $_reinstall_warnings;
+BEGIN {
+  my $misc = qr/
+    Prototype\ mismatch:\ sub\ .+?
+    |
+    Constant subroutine \S+ redefined
+  /x;
+  my $redef_or_misc = qr/Subroutine\ \S+\ redefined | $misc/x;
+
+  $_install_warnings   = qr/\A ( $redef_or_misc ) \s at\ .+?\ line\ \d+\.  /x;
+  $_reinstall_warnings = qr/\A ( $misc          ) \s at\ .+?\ line\ \d+\.  /x;
+}
+
 sub _install {
   my ($code, $fullname) = @_;
   no strict 'refs';
-  *$fullname = $code;
+  my @warnings;
+  {
+    my $old_warn_sig = $SIG{__WARN__};
+    local $SIG{__WARN__} = sub {
+      my ($error) = @_;
+      if (my ($base_error) = $error =~ $_install_warnings) {
+        $error = Carp::shortmess $base_error;
+      }
+      $old_warn_sig ? $old_warn_sig->($error) : (warn $error)
+    };
+    *$fullname = $code;
+  }
 }
 
 sub _reinstall {
   my ($code, $fullname) = @_;
   no strict 'refs';
-  no warnings;
+  my @warnings;
+  {
+    my $old_warn_sig = $SIG{__WARN__};
+    local $SIG{__WARN__} = sub {
+      my ($error) = @_;
+      if (my ($base_error) = $error =~ $_reinstall_warnings) {
+        $error = Carp::shortmess $base_error;
+      } elsif ($error =~ $_install_warnings) {
+        return;
+      }
+      $old_warn_sig ? $old_warn_sig->($error) : (warn $error)
+    };
+    *$fullname = $code;
+  }
+}
+
+sub _install_fatal {
+  my ($code, $fullname) = @_;
+  no strict 'refs';
+  local $SIG{__WARN__} = sub {
+    Carp::croak "attempted to redefine existing code $fullname";
+  };
   *$fullname = $code;
 }
 
@@ -173,14 +220,9 @@ will look for named code in the calling package.
 =cut
 
 sub install_installers {
-  my ($arg) = @_;
+  my ($into) = @_;
 
-  # set up default target here
-  ($arg->{into}) = caller(0) unless $arg->{into};
-
-  my @methods = qw(install_sub reinstall_sub);
-
-  for my $method (@methods) {
+  for my $method (qw(install_sub reinstall_sub)) {
     my $code = sub {
       my ($package, $subs) = @_;
       my ($caller) = caller(0);
@@ -195,7 +237,7 @@ sub install_installers {
       }
       return $return;
     };
-    install_sub({ code => $code, into => $arg->{into}, as => $method });
+    install_sub({ code => $code, into => $into, as => $method });
   }
 }
 
