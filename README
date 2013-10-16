@@ -1,6 +1,13 @@
-Sub-Install
 
-This module provides a simple routine for installing code into packages without
-looking at typeglobs or thinking about warnings or strictures.
 
-It also doesn't muddy up UNIVERSAL.
+This archive contains the distribution Sub-Install,
+version 0.927:
+
+  install subroutines into packages easily
+
+This software is copyright (c) 2005 by Ricardo SIGNES.
+
+This is free software; you can redistribute it and/or modify it under
+the same terms as the Perl 5 programming language system itself.
+
+
